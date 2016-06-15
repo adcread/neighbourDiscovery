@@ -35,19 +35,25 @@ pathLossExponent = 4;
 
 % Number of transmit/receive antennas for each user
 
-txAntennas = 4 * ones(40,1);
+txAntennas = 1 * ones(noUsers,1);
+txAntennas(1) = 4;
 
-rxAntennas = 4 * ones(40,1);
+rxAntennas = 1 * ones(noUsers,1);
+rxAntennas(1) = 4;
+
+% Transmit power for each user (dB)
+
+outputPower = sqrt(10.^(0.1*3*ones(noUsers,1)));
 
 % Length of each sequence in symbol periods
 
 noTraining1Slots = 10;
 
-lengthTraining1 = 64;
+lengthTraining1 = 63;
 
 noTraining2Slots = 5;
 
-lengthTraining2 = 64;
+lengthTraining2 = 63;
 
 lengthPayload = 128;
 
@@ -122,10 +128,22 @@ end
 
 % Create training sequences for each user
 
+goldSequences1 = generateGoldCodes(round(log2(lengthTraining1)));
+
 training1Sequence = cell(noUsers,1);
 
+% Define the alphabet over which the training sequence is defined
+
+alphabet = [-1 1];
+
+% Randomly select (without replacement) sequences for each stream from the
+% set of Gold sequences.
+
 for user = 1:noUsers
-    training1Sequence{user} = randi(4,txAntennas(user),lengthTraining1);
+    training1SequenceSelection = randsample(round(log2(lengthTraining1)),txAntennas(user));
+    for stream = 1:txAntennas(user)
+        training1Sequence{user}(stream,:) = goldSequences1(:,training1SequenceSelection(stream));
+    end
 end
 
 % Encode training sequences into modulation scheme
@@ -133,13 +151,13 @@ end
 for user = 1:noUsers
     for training1Slot = 1:noTraining1Slots
         if (training1Slot == training1SlotAssignment(user))
-            transmittedSymbol{user}(:,(lengthTraining1*(training1Slot-1))+1:(lengthTraining1*training1Slot)) = training1Sequence{10};
+            transmittedSymbol{user}(:,(lengthTraining1*(training1Slot-1))+1:(lengthTraining1*training1Slot)) = training1Sequence{user};
         end
     end   
 end
 
 for user = 1:noUsers
-    transmittedSignal{user} = modulationScheme(transmittedSymbol{user},4);
+    transmittedSignal{user} = outputPower(user) * transmittedSymbol{user};
 end
 
 % Users transmit sequences
@@ -152,9 +170,46 @@ for user = 1:noUsers
     end
 end
 
-%% Detection of users and SINR estimation for uncoded transmission
+%% Detection of users and SNR estimation for uncoded transmission
 
-% Estimate SINR of strongest signal
+% Act upon the signal in a timeslot basis
+
+estimate = zeros(rxAntennas(1),lengthTraining1);
+
+for training1Slot = 1:noTraining1Slots
+    
+    slotStart = lengthTraining1*(training1Slot-1)+1;
+    slotEnd = (lengthTraining1*training1Slot);
+    
+    % Estimate SNR of strongest signal
+    
+    estPower = mean(signalPower(receivedSignal{1}(1,slotStart:slotEnd)));
+    
+    % For each stream of the received signal independently perform ML decoding
+    
+    for stream = 1:rxAntennas(1)
+        for symbol = 0:lengthTraining1-1
+            estimate(stream,slotStart+symbol) = maximumLikelihoodEstimation(receivedSignal{1}(stream,slotStart+symbol),alphabet);
+        end
+    end
+    
+    % LS estimate of channel matrix using inverted estimate of training signal
+    
+    H_hat{training1Slot} = receivedSignal{1}(:,slotStart:slotEnd) * pinv(estimate(:,slotStart:slotEnd));
+    
+    % Develop an SVD-based inital estimate of strongest channel matrix:
+    
+    training1Covariance{training1Slot} = (receivedSignal{1}(:,slotStart:slotEnd) * receivedSignal{1}(:,slotStart:slotEnd)')/lengthTraining1;
+    
+    training1EstimatedSequence{training1Slot} = (receivedSignal{1}(:,slotStart:slotEnd) * estimate(:,slotStart:slotEnd)')/lengthTraining1;
+    
+    [eigenvectors{training1Slot},eigenvalues{training1Slot}] = eig(training1Covariance{training1Slot});
+
+    combiningVector{training1Slot} = inv(training1Covariance{training1Slot}) * training1EstimatedSequence{training1Slot};
+    
+end
+
+
 
 % 
 
