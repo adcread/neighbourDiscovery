@@ -5,7 +5,10 @@
 % Date                  Change
 % ----                  --------------------------------------------------
 % 07/06/16              Created file
-
+% 22/06/16              Implemented Direct Matrix Inversion for recovery
+%                       of channel matrix - users each transmit a unique
+%                       orthogonal code in first 1/2 of training seq 1 to
+%                       aid identification.
 
 %% Include paths to support scripts & functions
 
@@ -23,7 +26,7 @@ wavelength = 3e8/2.4e9;
 
 % Number of users in network
 
-noUsers = 15;
+noUsers = 4;
 
 % Size of network (square distance units)
 
@@ -49,15 +52,15 @@ outputPower = sqrt(10.^(0.1*3*ones(noUsers,1)));
 
 noTraining1Slots = 10;
 
-lengthTraining1 = 63;
+lengthTraining1 = 31;
 
 noTraining2Slots = 5;
 
-lengthTraining2 = 63;
+lengthTraining2 = 31;
 
 lengthPayload = 128;
 
-lengthTotal = (lengthTraining1*noTraining1Slots) + (lengthTraining2 * noTraining2Slots) + lengthPayload;
+lengthTotal = (lengthTraining1 * 2 * noTraining1Slots) + (lengthTraining2 * noTraining2Slots) + lengthPayload;
 
 %% Create a set of users in an area using user placement model
 
@@ -94,13 +97,20 @@ for user = 1:noUsers
     end
 end
                
-%% Create data structures to hold transmitted signals
+
+%% Create data structures to hold transmitted signals & filters
+
+transmitPrecoder = cell(noUsers,1);
+
+receivePrecoder = cell(noUsers,1);
 
 training1Symbol = cell(noUsers,1);
 
 training2Symbol = cell(noUsers,1);
 
 payloadSymbol = cell(noUsers,1);
+
+transmittedSymbol = cell(noUsers,1);
 
 transmittedSignal = cell(noUsers,1);
 
@@ -115,6 +125,9 @@ for user = 1:noUsers
     receivedSignal{user} = zeros(rxAntennas(user),lengthTotal);   
 end
 
+training1ReceivedCovariance = cell(noUsers,noTraining1Slots);
+training1TrainingCovariance = cell(noUsers,noTraining1Slots);
+training1Equaliser = cell(noUsers,noTraining1Slots);
 
 %% First training period
 
@@ -123,7 +136,9 @@ end
 training1SlotAssignment = zeros(1,noUsers);
 
 for user = 1:noUsers
-    training1SlotAssignment(user) = randi(noTraining1Slots);
+    %training1SlotAssignment(user) = randi(noTraining1Slots);
+    training1SlotAssignment = [2 1 1 4];
+    training1CodeAssignment = [1 2 3 4];
 end
 
 % Create training sequences for each user
@@ -140,7 +155,7 @@ alphabet = [-1 1];
 % set of Gold sequences.
 
 for user = 1:noUsers
-    training1SequenceSelection = randsample(round(log2(lengthTraining1)),txAntennas(user));
+    training1SequenceSelection = randsample(noUsers:length(goldSequences1),txAntennas(user));
     for stream = 1:txAntennas(user)
         training1Sequence{user}(stream,:) = goldSequences1(:,training1SequenceSelection(stream));
     end
@@ -151,7 +166,7 @@ end
 for user = 1:noUsers
     for training1Slot = 1:noTraining1Slots
         if (training1Slot == training1SlotAssignment(user))
-            transmittedSymbol{user}(:,(lengthTraining1*(training1Slot-1))+1:(lengthTraining1*training1Slot)) = training1Sequence{user};
+            transmittedSymbol{user}(:,(lengthTraining1*2*(training1Slot-1))+1:(lengthTraining1*2*training1Slot)) = [repmat(goldSequences1(:,training1CodeAssignment(user)).',txAntennas(user),1) training1Sequence{user}];
         end
     end   
 end
@@ -170,46 +185,35 @@ for user = 1:noUsers
     end
 end
 
+
 %% Detection of users and SNR estimation for uncoded transmission
 
-% Act upon the signal in a timeslot basis
+% For each user in the network
 
-estimate = zeros(rxAntennas(1),lengthTraining1);
+for user = 1:noUsers
+    
+    % Act upon the signal in a timeslot basis
 
-for training1Slot = 1:noTraining1Slots
-    
-    slotStart = lengthTraining1*(training1Slot-1)+1;
-    slotEnd = (lengthTraining1*training1Slot);
-    
-    % Estimate SNR of strongest signal
-    
-    estPower = mean(signalPower(receivedSignal{1}(1,slotStart:slotEnd)));
-    
-    % For each stream of the received signal independently perform ML decoding
-    
-    for stream = 1:rxAntennas(1)
-        for symbol = 0:lengthTraining1-1
-            estimate(stream,slotStart+symbol) = maximumLikelihoodEstimation(receivedSignal{1}(stream,slotStart+symbol),alphabet);
+    for training1Slot = 1:noTraining1Slots
+
+        slotStart = lengthTraining1*(training1Slot-1)+1;
+        slotEnd = (lengthTraining1*training1Slot);
+
+        % Direct Matrix Inversion (DMI)
+
+        for symbol = 1:lengthTraining1
+            training1ReceivedCovariance{user,training1Slot} = (receivedSignal{user}(:,slotStart+symbol-1) * receivedSignal{user}(:,slotStart+symbol-1)')/(lengthTraining1);
         end
+
+        for symbol = 1:lengthTraining1
+            training1TrainingCovariance{user,training1Slot} = (receivedSignal{1}(:,slotStart+symbol-1) * goldSequences1(symbol,1)')/(lengthTraining1);
+        end
+
+        training1Equaliser{user,training1Slot} = pinv(training1ReceivedCovariance{user,training1Slot}) * training1TrainingCovariance{user,training1Slot};
+
     end
-    
-    % LS estimate of channel matrix using inverted estimate of training signal
-    
-    H_hat{training1Slot} = receivedSignal{1}(:,slotStart:slotEnd) * pinv(estimate(:,slotStart:slotEnd));
-    
-    % Develop an SVD-based inital estimate of strongest channel matrix:
-    
-    training1Covariance{training1Slot} = (receivedSignal{1}(:,slotStart:slotEnd) * receivedSignal{1}(:,slotStart:slotEnd)')/lengthTraining1;
-    
-    training1EstimatedSequence{training1Slot} = (receivedSignal{1}(:,slotStart:slotEnd) * estimate(:,slotStart:slotEnd)')/lengthTraining1;
-    
-    [eigenvectors{training1Slot},eigenvalues{training1Slot}] = eig(training1Covariance{training1Slot});
 
-    combiningVector{training1Slot} = inv(training1Covariance{training1Slot}) * training1EstimatedSequence{training1Slot};
-    
 end
-
-
 
 % 
 
