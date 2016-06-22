@@ -15,6 +15,7 @@
 addpath('C:\PhD\neighbourDiscovery\General Functions');
 addpath('C:\PhD\neighbourDiscovery\Channel');
 addpath('C:\PhD\neighbourDiscovery\Encoding');
+addpath('C:\PhD\neighbourDiscovery\Equalisation');
 
 
 %% Initialise simulation with the following parameters:
@@ -62,6 +63,10 @@ lengthPayload = 128;
 
 lengthTotal = (lengthTraining1 * 2 * noTraining1Slots) + (lengthTraining2 * noTraining2Slots) + lengthPayload;
 
+% step size for decision-feedback equaliser
+
+dfeStepSize = 0.01;
+
 %% Create a set of users in an area using user placement model
 
 % Place users randomly on unit square in 2 dimensions - permits use of
@@ -83,6 +88,8 @@ for user = 1:noUsers
         userDistance(user, otherUser) = euclideanDistance(userLocation(user,:),userLocation(otherUser,:));
     end
 end
+
+userDistance = userDistance + eye(noUsers) * networkSize^2;
 
 % Assume Gaussian channel model, no antenna correlation. 
 
@@ -194,23 +201,35 @@ for user = 1:noUsers
     
     % Act upon the signal in a timeslot basis
 
-    for training1Slot = 1:noTraining1Slots
+     for training1Slot = 1:noTraining1Slots
 
-        slotStart = lengthTraining1*(training1Slot-1)+1;
-        slotEnd = (lengthTraining1*training1Slot);
+        slotStart = lengthTraining1*2*(training1Slot-1)+1;
+        slotEnd = slotStart + lengthTraining1 - 1;
 
-        % Direct Matrix Inversion (DMI)
+        % Direct Matrix Inversion (DMI) for initial training
 
+        training1Equaliser{user,training1Slot} = directMatrixInversionEqualiser(receivedSignal{user}(:,slotStart:slotEnd),goldSequences1(:,1));
+        
+        % Perform decision-feedback adaptive equalisation on unknown training symbols
+               
         for symbol = 1:lengthTraining1
-            training1ReceivedCovariance{user,training1Slot} = (receivedSignal{user}(:,slotStart+symbol-1) * receivedSignal{user}(:,slotStart+symbol-1)')/(lengthTraining1);
+            training1EstimatedSignal(symbol) = training1Equaliser{user,training1Slot}' * receivedSignal{user}(:,slotStart + lengthTraining1 + symbol - 1);
+            training1EstimatedSymbol(symbol) = maximumLikelihoodEstimation(training1EstimatedSignal(symbol),alphabet);
+            error(symbol) = training1EstimatedSymbol(symbol) - training1EstimatedSignal(symbol);
+            training1Equaliser{user,training1Slot} = training1Equaliser{user,training1Slot} + dfeStepSize * error(symbol)'*receivedSignal{user}(:,slotStart + lengthTraining1 + symbol - 1);
         end
+        
+        % Store the user information, not necessarily with any idea of which user is which.
+        
+        [~,training1StrongestUser] = min((userDistance(user,:))); % this is channel knowledge - need to find a better way of doing this.
+        
+        training1EstimatedSignal = training1Equaliser{user,training1Slot}' * receivedSignal{user}(:,slotStart+lengthTraining1:slotEnd+lengthTraining1);
+        
+        training1IsolatedSignal = training1EstimatedSignal - training1EstimatedSymbol;
+            
+        pause;
 
-        for symbol = 1:lengthTraining1
-            training1TrainingCovariance{user,training1Slot} = (receivedSignal{1}(:,slotStart+symbol-1) * goldSequences1(symbol,1)')/(lengthTraining1);
-        end
-
-        training1Equaliser{user,training1Slot} = pinv(training1ReceivedCovariance{user,training1Slot}) * training1TrainingCovariance{user,training1Slot};
-
+        
     end
 
 end
