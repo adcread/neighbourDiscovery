@@ -166,7 +166,7 @@ end
 for user = 1:noUsers
     for training1Slot = 1:noTraining1Slots
         if (training1Slot == training1SlotAssignment(user))
-            transmittedSymbol{user}(:,(lengthTraining1*2*(training1Slot-1))+1:(lengthTraining1*2*training1Slot)) = [repmat(goldSequences1(:,training1CodeAssignment(user)).',txAntennas(user),1) training1Sequence{user}];
+            transmittedSymbol{user}(:,(lengthTraining1*2*(training1Slot-1))+1:(lengthTraining1*2*training1Slot)) = [repmat(goldSequences1(:,1).',txAntennas(user),1) training1Sequence{user}];
         end
     end   
 end
