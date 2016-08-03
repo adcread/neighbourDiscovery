@@ -144,7 +144,7 @@ training1SlotAssignment = zeros(1,noUsers);
 
 for user = 1:noUsers
     %training1SlotAssignment(user) = randi(noTraining1Slots);
-    training1SlotAssignment = [2 1 1 4];
+    training1SlotAssignment = [2 1 1 1];
     training1CodeAssignment = [1 2 3 4];
 end
 
