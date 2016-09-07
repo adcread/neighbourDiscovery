@@ -9,7 +9,7 @@ addpath('C:\PhD\neighbourDiscovery\General Functions\');
 
 %% Set up simulation parameters
 
-noElements = 4;
+noElements = 3;
 
 % Relevant only to the creation of the array - not a parameter in the
 % investigation 
@@ -46,7 +46,7 @@ for baseIndex = 1:noElements
 
     % calculate the weights and phasing angles to steer the lobes
 
-    weights = 1/(sqrt(noElements)) * exp(baseIndex*[0:noElements-1]*-1i*2*pi/noElements);
+    weights(baseIndex,:) = 1/(sqrt(noElements)) * exp(baseIndex*[0:noElements-1]*-1i*2*pi/noElements);
 
     for antennaIndex = 1:noElements
 
@@ -54,7 +54,7 @@ for baseIndex = 1:noElements
 
             for azIndex = 1:length(az)
 
-                pattern{baseIndex}(elIndex,azIndex) = pattern{baseIndex}(elIndex,azIndex) + (weights(antennaIndex) * exp(-1i * waveNumber * (antennaIndex-1) * antennaSeparation * cos(el(elIndex)) * sin(az(azIndex))));
+                pattern{baseIndex}(elIndex,azIndex) = pattern{baseIndex}(elIndex,azIndex) + (weights(baseIndex,antennaIndex) * exp(-1i * waveNumber * (antennaIndex-1) * antennaSeparation * cos(el(elIndex)) * sin(az(azIndex))));
 
             end
 
@@ -74,7 +74,7 @@ for baseIndex = 1:noElements
     
     % Create CDF of the azimuth pattern array factor
     
-    [azPatternCDF{baseIndex},cdfRange{baseIndex}] = histcounts(abs(pattern{baseIndex}),100,'Normalization','cdf');
+    [azPatternCDF{baseIndex},cdfRange{baseIndex}] = histcounts(azPattern{baseIndex},100,'Normalization','cdf');
 
     % Add in P(x<=0) element to CDF so that both vectors align for plotting
     
@@ -118,7 +118,7 @@ end
 title('Azimuth Pattern')
 
 subplot(1,2,2);
-polar(az,sumPattern);
+polar(az,sumPattern/noElements);
 title('Sum pattern over beamformers');
 
 % Plot the CDFs for the various steering angles

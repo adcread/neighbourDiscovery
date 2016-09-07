@@ -10,7 +10,7 @@ addpath('C:\PhD\neighbourDiscovery\Array\');
 
 noElements = 4;
 
-noSuppressionLevels = 7;
+noSuppressionLevels = 4;
 
 % Relevant only to the creation of the array - not a parameter in the
 % investigation 
@@ -37,7 +37,6 @@ el = ([-90:90]/360) * 2 * pi;
 
 pattern = cell(1,noSuppressionLevels);
 azPattern = cell(1,noSuppressionLevels);
-cdfRange = cell(1,noSuppressionLevels);
 
 %% Perform multiple calculations of array pattern
 
@@ -66,10 +65,11 @@ for levelIndex = 1:noSuppressionLevels
         end
         
     end
-    
+        
 end
 
-%% Generate statistical data on performance of antenna array
+
+%% Capture the azimuth radiation patterns
 
 for levelIndex = 1:noSuppressionLevels
        
@@ -79,7 +79,27 @@ for levelIndex = 1:noSuppressionLevels
     
     % Create CDF of the azimuth pattern array factor
     
-    [azPatternCDF{levelIndex},cdfRange{levelIndex}] = histcounts(abs(pattern{levelIndex}),100,'Normalization','cdf');
+end
+
+
+%% Generate statistical data on performance of antenna array
+
+% Find the largest value of array gain for all beamformers, use this to
+% create the histogram bins
+
+maxArrayGain = 1;
+
+for levelIndex = 1:noSuppressionLevels
+    
+    maxArrayGain = max(maxArrayGain,max(azPattern{levelIndex}));
+    
+end
+
+cdfRange = linspace(0,maxArrayGain,100);
+
+for levelIndex = 1:noSuppressionLevels
+    
+    azPatternCDF{levelIndex} = histcounts(azPattern{levelIndex},cdfRange,'Normalization','cdf');
 
     % Add in P(x<=0) element to CDF so that both vectors align for plotting
     
@@ -89,25 +109,25 @@ end
 
 %% Determine location and width of main lobe
 
-for levelIndex = 1:noSuppressionLevels
-   
-    % Determine maximum gain of antenna array from the array CDF
-    
-    arrayFactorMax(levelIndex) = cdfRange{levelIndex}(end-1);
-   
-    [mainLobeCentre(levelIndex),mainLobeWidth(levelIndex)] = beamwidth(azPattern{levelIndex},arrayFactorMax(levelIndex)/sqrt(2),(2*pi)/length(az));
-      
-end
-
-% Azimuth distribution of directivity across beamformers
-
-sumPattern = zeros(1,length(az));
-
-for levelIndex = 1:noSuppressionLevels
-    
-    sumPattern = sumPattern + azPattern{levelIndex};
-
-end
+% for levelIndex = 1:noSuppressionLevels
+%    
+%     % Determine maximum gain of antenna array from the array CDF
+%     
+%     arrayFactorMax(levelIndex) = cdfRange(end-1);
+%    
+%     [mainLobeCentre(levelIndex),mainLobeWidth(levelIndex)] = beamwidth(azPattern{levelIndex},arrayFactorMax(levelIndex)/sqrt(2),(2*pi)/length(az));
+%       
+% end
+% 
+% % Azimuth distribution of directivity across beamformers
+% 
+% sumPattern = zeros(1,length(az));
+% 
+% for levelIndex = 1:noSuppressionLevels
+%     
+%     sumPattern = sumPattern + azPattern{levelIndex};
+% 
+% end
 
 
 %% Plot the results
@@ -131,7 +151,7 @@ figure;
 hold on;
 
 for levelIndex = 1:noSuppressionLevels
-        plot(cdfRange{levelIndex},azPatternCDF{levelIndex},plotFormat(levelIndex,'bw'),'DisplayName',[num2str(3*(levelIndex-1)) ' dB suppression']);
+        plot(cdfRange,azPatternCDF{levelIndex},plotFormat(levelIndex,'bw'),'DisplayName',[num2str(3*(levelIndex-1)) ' dB suppression']);
 end
 
 legend(gca,'show','Location','NorthWest');
