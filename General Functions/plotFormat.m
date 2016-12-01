@@ -11,19 +11,28 @@ colorDef = ['r' 'g' 'b' 'c' 'm' 'y' 'k'];
 
 if strcmp(colorSwitch,'color')
     
+    colorIndex = floor((plotIndex-1)/7) + 1;
     
-elseif strcmp(colorSwitch,'bw')
-    
-    lineIndex = floor((plotIndex-1)/13) + 1;
+    lineIndex = mod(plotIndex-1,7) + 1;
     
     lineSpec = lineDef{lineIndex};
     
-    markerIndex = mod(plotIndex-1,13);
+    colorSpec = colorDef(colorIndex);
     
-    markerSpec = markerDef(markerIndex+1);
+    markerSpec = markerDef(1);
+    
+elseif strcmp(colorSwitch,'bw')
+    
+    markerIndex = mod(plotIndex-1,13) + 1 ;
+    
+    lineIndex = floor((plotIndex-1)/13) + 1;
     
     colorSpec = 'k';
+               
+    markerSpec = markerDef(markerIndex+1);
     
+    lineSpec = lineDef{lineIndex};
+
 end
 
 formatDefString = strcat(lineSpec,markerSpec,colorSpec);
