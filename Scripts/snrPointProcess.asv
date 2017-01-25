@@ -1,0 +1,114 @@
+%% Determine the intensity of transformed PPP
+
+% Set parameters for simulation
+
+origin = [0 0];
+
+userDensity = 0.1;
+
+networkRadius = 100;
+
+transmitPower = 10^(0/20);
+
+fadingCoefficient = 1;
+
+alohaTransmissionProbability = 1;
+
+noisePower = 10^(-40/20);
+
+noInstances = 1e3;
+
+% Set parameters for antenna pattern
+
+arrayDirectivity = 0.5;
+
+noArrayLobes = 2;
+
+% Create antenna array radiation pattern
+
+azimuth = linspace(0,2*pi,360);
+
+arrayPattern = 1 + arrayDirectivity * cos(noArrayLobes * azimuth);
+
+% Create vector of distance measures
+
+powerAxis = linspace(0,0.5,1000);
+
+% Create 2-D network of users for each instance
+
+receivedPowerHist = cell(noInstances,1);
+
+for instanceIndex = 1:noInstances
+   
+    groundProcessLocation = [];
+    groundProcessOrientation = [];
+    
+    [groundProcessLocation,groundProcessOrientation] = createRandomNetwork(networkRadius,userDensity,'disc');
+
+    %[thinnedProcessLocation,thinnedProcessOrientation] = thinNetwork(groundProcessLocation,groundProcessOrientation,alohaTransmissionProbability,0);
+
+    % Count the number of users
+
+    noUsers = length(groundProcessOrientation);
+
+    receivedPower = zeros(1,noUsers);
+    
+    for userIndex = 1:noUsers
+        
+        receivedPower(userIndex) = transmitPower * (euclideanDistance(groundProcessLocation(userIndex,:),origin))^(-fadingCoefficient);
+    
+    end
+    
+    [receivedPowerHist{instanceIndex},~] = histcounts(receivedPower,powerAxis,'Normalization','cumcounts');
+        
+end
+
+% Compute the average number of nodes found in each interval, i.e. find
+% the average of all the histograms from each network instance. Zero pad
+% the average to include the value for <0
+
+receivedPowerHistogram = [0 ensembleAve(receivedPowerHist)];
+
+% Calculate the expected intensity measure of the received power point
+% process
+
+recievedPowerIntensityMeasure = pi* userDensity * powerAxis.^(-2/fadingCoefficient);
+
+% Compute the intensity function of the received power point process from
+% the received power intensity measure
+
+receivedPower = [diff(receivedPowerHistogram) 0]
+    
+% Calculate SNRs to point in the centre
+% 
+% originNodeDistance = zeros(1,noUsers);
+% 
+% originNodeAngle = zeros(1,noUsers);
+% 
+% for userIndex = 1:noUsers
+% 
+%     originNodeDistance(userIndex) = euclideanDistance(origin, thinnedProcessLocation(userIndex,:));
+% 
+%     originNodeAngle(userIndex) = euclideanAngle(origin, thinnedProcessOrientation(userIndex));
+% 
+%     originNodeAngle = mod(round(originNodeAngle*360/(2*pi)),360)+1;
+% 
+% end
+% 
+% signal = transmitPower * antennaPattern(originNodeAngle) ./ (1 + originNodeDistance.^(fadingCoefficient));
+% 
+% 
+% % Transform the 2D point process to 1D SNR point process
+% 
+% 
+% 
+% % Compute CDF of user distance differentials
+% 
+% distanceAxis = linspace(0,networkRadius,100);
+% 
+% for distanceIndex = 1:length(distanceAxis)
+%     
+%     cdfUserDistances(distanceIndex) = length(find(originNodeDistance <= distanceAxis(distanceIndex)))/noUsers;
+%     
+% end
+% 

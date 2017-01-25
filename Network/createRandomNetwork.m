@@ -8,9 +8,11 @@ location = unifrnd(-networkRadius,networkRadius,numberOfUsers,2);
 
 orientation = unifrnd(0,360,numberOfUsers,1);
 
-if domainShape == 'disc'
+if (strcmp(domainShape,'disc'))
     
     % If domain is a disc of radius x, delete all elements for which  d > x
+    
+    distance = zeros(1,numberOfUsers);
     
     for i = 1:length(orientation)
        
@@ -23,9 +25,8 @@ if domainShape == 'disc'
     location = location(retentionVector,:);
     orientation = orientation(retentionVector);
     
-elseif domainShape == 'square'
+elseif (strcmp(domainShape,'square'))
     
 end
 
 end
-

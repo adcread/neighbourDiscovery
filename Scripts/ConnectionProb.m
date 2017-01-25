@@ -8,9 +8,9 @@ origin = [0 0];
 
 pathlossExponent = 4; % Assume 2-ray multipath propagation model, alpha = 4
 
-noInstances = 10;
+noInstances = 1;
 
-networkRadius = 8; % units are unit distance (assumed to be m)
+networkRadius = 32; % units are unit distance (assumed to be m)
 
 nodeDensity = 1;    % units are users per square unit distance
 
@@ -24,7 +24,7 @@ azimuth = 2*pi*[0:359]/360;
 
 % mainlobeBeamwidth = 30; % mainlobe beamwidth in degrees * 360/length(azimuth)
 % 
-% mainlobeLevel = 10^(3/20);
+% mainlobeLevel = 10^(6/20);
 % 
 % sidelobeLevel = 10^(1/20);
 % 
@@ -63,7 +63,7 @@ sinrThreshold = 10^(0/20); % dummy SINR (linear) threshold for now (=1 to align 
 
 alohaTransmissionProbability = 0.4;
 
-sinr = zeros(1,noInstances);
+sinr = cell(1,noInstances);
 
 % create the random network
 
@@ -73,8 +73,15 @@ for instanceIndex=1:noInstances
     
     % Thin the network with ALOHA transmission probability
     
+    [nodeLocation,nodeOrientation] = createRandomNetwork(networkRadius,nodeDensity,'disc');
+    
     [thinnedNodeLocation,thinnedNodeOrientation] = thinNetwork(nodeLocation,nodeOrientation,alohaTransmissionProbability,1);
-        
+    
+    % Add a node at predetermined distance
+    
+    
+    
+    
     % Calculate the distance and angle from origin of each node
     
     noNodes = length(thinnedNodeLocation);
@@ -85,7 +92,7 @@ for instanceIndex=1:noInstances
     
     % sort the nodes by distance from the origin
     
-    [thinnedNodeLocation,thinnedNodeOrientation] = sortNetwork(thinnedNodeLocation,thinnedNodeOrientation,origin);
+    % [thinnedNodeLocation,thinnedNodeOrientation] = sortNetwork(thinnedNodeLocation,thinnedNodeOrientation,origin);
     
     for nodeIndex = 1:noNodes
     
@@ -99,25 +106,35 @@ for instanceIndex=1:noInstances
     
     originNodeAngle = mod(round(originNodeAngle*360/(2*pi)),360);
     
+    % determine SINR, treating each node as the desired transmitter
+    
     % S = (P*|h|^2)/(d^a+1)
     
-    signal = (nodeTransmitPower * antennaPattern(originNodeAngle(1)+1)) / (1 + originNodeDistance(1)^pathlossExponent);
+    for nodeIndex = 1:length(originNodeAngle)
     
-    interference = 0;
+        signal = (nodeTransmitPower * antennaPattern(originNodeAngle(nodeIndex)+1)) / (1 + originNodeDistance(nodeIndex)^pathlossExponent);
     
-    % I = (P*|h|^2)/(d^a+1)
-    
-    for nodeIndex = 2:length(originNodeAngle)
+        interferers = 1:length(originNodeAngle);
         
-        interference = interference + (nodeTransmitPower * antennaPattern(originNodeAngle(nodeIndex)+1)) / ...
-            (1 + originNodeDistance(nodeIndex)^pathlossExponent);
+        interferers(nodeIndex) = [];
+        
+        interference = 0;
+            
+        for otherNodeIndex = interferers
+            
+            % I = (P*|h|^2)/(d^a+1)
+    
+            interference = interference + (nodeTransmitPower * antennaPattern(originNodeAngle(otherNodeIndex)+1)) / ...
+                (1 + originNodeDistance(otherNodeIndex)^pathlossExponent);
 
+        end
+    
+     noise = 0; % noisePower;
+     
+     sinr{instanceIndex}(nodeIndex) = signal/(interference + noise);    
+     
     end
-    
-    noise = noisePower;
-    
-    sinr(instanceIndex) = signal/(interference + noise);
-    
+        
 end
 
 % plug in expression for integral of antenna pattern over 2*pi

@@ -3,21 +3,20 @@
 
 origin = [0 0];
 
-noInstances = 10000;
+noNetworkInstances = 20;
+
+noAlohaInstances = 1000;
 
 nodeDensity = 1;    % units are users per square unit distance
 
 contactDistance = zeros(1,noInstances);
 contactDirection = zeros(1,noInstances);
 
-averageContactDistance = zeros(8,20);
-calculatedAverageContactDistance = zeros(8,20);
+networkRadius = 8;
 
 tic;
 
-for networkRadiusIndex = 1:6
-
-    networkRadius = 8;
+for networkInstanceIndex = 1:noNetworkInstances
 
     [nodeLocation, nodeDirection] = createRandomNetwork(networkRadius,nodeDensity,'disc');   
 
@@ -41,24 +40,28 @@ for networkRadiusIndex = 1:6
 
         end
 
-        averageContactDistance(networkRadiusIndex,alohaProbabilityIndex) = mean(contactDistance);
-        calculatedAverageContactDistance(networkRadiusIndex,alohaProbabilityIndex) = 1/(2*sqrt(nodeDensity*0.05*alohaProbabilityIndex));
+        collectedContactDistance(networkInstanceIndex,alohaProbabilityIndex) = mean(contactDistance);
 
     end
+    
 
+end
+
+for alohaProbabilityIndex = 1:20
+    
+    calculatedAverageContactDistance(alohaProbabilityIndex) = 1/(2*sqrt(nodeDensity*0.05*alohaProbabilityIndex));
+
+    averageContactDistance(alohaProbabilityIndex) = mean(collectedContactDistance(:,alohaProbabilityIndex));
+    
 end
 
 toc;
 
-plot(0.05*[1:20],calculatedAverageContactDistance(1,:),'DisplayName',['Calculated Average Contact Distance']);
+plot(0.05*[1:20],calculatedAverageContactDistance,'DisplayName',['Calculated Average Contact Distance']);
 
 hold on;
-
-for networkRadiusIndex = 1:6
     
-    plot(0.05*[1:20],averageContactDistance(networkRadiusIndex,:),'DisplayName',['Simulated Average Contact Distance (instance ' num2str(networkRadiusIndex) ')']);
-
-end
+plot(0.05*[1:20],averageContactDistance,'DisplayName',['Simulated Average Contact Distance']);
 
 xlabel('ALOHA Transmission Probability');
 ylabel('Distance (m)');
