@@ -9,7 +9,7 @@ markerDef = [' ' '+' 'o' '*' 'x' 's' 'd' '^' 'v' '>' '<' 'p' 'h'];
 
 colorDef = ['r' 'g' 'b' 'c' 'm' 'y' 'k'];
 
-if strcmp(colorSwitch,'color')
+if strcmp(colorSwitch,'c')
     
     colorIndex = floor((plotIndex-1)/7) + 1;
     

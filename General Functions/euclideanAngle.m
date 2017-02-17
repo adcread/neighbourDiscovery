@@ -1,5 +1,6 @@
 function [ angle ] = euclideanAngle( point1, point2 )
-%EUCLIDEANANGLE Summary of this function goes here
+%EUCLIDEANANGLE Returns the angle in radians between two sets of
+%coordinates
 %   Detailed explanation goes here
 
     chord = point2 - point1;
