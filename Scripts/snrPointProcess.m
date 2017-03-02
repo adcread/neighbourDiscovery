@@ -4,9 +4,9 @@
 
 origin = [0 0];
 
-userDensity = 0.1;
+userDensity = 3;
 
-networkRadius = 100;
+networkRadius = 200;
 
 % transmitAmplitude is expressed in Volts
 
@@ -14,7 +14,7 @@ transmitAmplitude = 10^(0/20);
 
 fadingCoefficient = 3;
 
-alohaTransmissionProbability = 1;
+alohaTransmissionProbability = 0.7;
 
 % noiseAmplitude is expressed in Volts
 
@@ -36,13 +36,16 @@ arrayPattern = 1 + arrayDirectivity * cos(noArrayLobes * azimuth);
 
 % Create vector of distance measures
 
-samplingResolution = 0.5;
+samplingResolution = 0.1;
 
 % Create the axis onto which the point process intensities are measured;
 % this is expressed in decibels (10*log10(P))
 
-minPower = floor(20*log10((1-arrayDirectivity)) - fadingCoefficient*10*log10(networkRadius))+20;
-maxPower = ceil(20*log10((1+arrayDirectivity)) - fadingCoefficient*10*log10(1e-3));
+minPower = floor(20*log10((1-arrayDirectivity)) - ...
+    fadingCoefficient*10*log10(networkRadius));
+
+maxPower = ceil(20*log10((1+arrayDirectivity)) - ...
+    fadingCoefficient*10*log10(1e-2));
 
 powerAxis = minPower:samplingResolution:maxPower;
 
@@ -67,43 +70,43 @@ for instanceIndex = 1:noInstances
     noUsers(instanceIndex) = length(thinnedProcessOrientation);
 
     mappedProcessLocation = zeros(1,noUsers(instanceIndex));
+       
+    % Compute the distance angle between the origin and the locations of
+    % the users in the network
     
-    gain = zeros(1,noUsers(instanceIndex));
-    attenuation = zeros(1,noUsers(instanceIndex));
+    [userDistance,userAngle] = euclideanDistAngle(origin,...
+        thinnedProcessLocation);
     
-    for userIndex = 1:noUsers(instanceIndex)
-        
-        % Gain is expressed here in Amplitude gain (i.e. Volts)
-               
-        gain(userIndex) = transmitAmplitude * arrayPattern(mod(round(...
-            thinnedProcessOrientation(userIndex)*360/(2*pi)),360)+1);
-        
-        % Map the locations of the thinned point process to the Real line
-        % representing the received power. 
-        % Psi' = P_r(x)= 20*log10(A_t*G)/(|x|^alpha)
-        
-        attenuation(userIndex) = 10 * fadingCoefficient * log10(...
-            euclideanDistance(thinnedProcessLocation(userIndex,:),origin));
-        
-        mappedProcessLocation(userIndex) = ...
-            20*log10(gain(userIndex)) - attenuation(userIndex);
+    % Gain is expressed here in Amplitude gain (i.e. Volts)
+
+    userGain = transmitAmplitude * arrayPattern(round(mod((userAngle + ...
+        pi)*360/(2*pi) - thinnedProcessOrientation,359))+1);
     
-    end
+    attenuation = 10 * fadingCoefficient * log10(userDistance);
     
+    mappedProcessLocation = 20*log10(userGain) - attenuation.';
+   
     % Compute the contact distance for that instance of the point process -
     % the closest user is the one with the largest x' value.
     
-    contactDistance(instanceIndex) = max(mappedProcessLocation);
+    mappedProcessLocation = sort(mappedProcessLocation);
     
+    contactDistance(instanceIndex) = max(mappedProcessLocation);
+       
     mappedProcessIntensity{instanceIndex} = zeros(1,length(powerAxis));
         
-    for powerIndex = 1:length(powerAxis)
-        
-        mappedProcessIntensity{instanceIndex}(powerIndex) = ...
-            length(find(mappedProcessLocation >= powerAxis(powerIndex)));
+    mappedProcessIntensity{instanceIndex} = [noUsers(instanceIndex) ...
+        noUsers(instanceIndex)-histcounts(mappedProcessLocation,...
+        powerAxis,'Normalization','cumcount')];   
     
-    end
-        
+%     for powerIndex = 1:length(powerAxis)
+% 
+%     mappedProcessIntensity{instanceIndex}(powerIndex) = length(...
+%         find(mappedProcessLocation >= powerAxis(powerIndex)));
+% 
+%     end
+    
+    
 end
 
 %%
@@ -120,8 +123,12 @@ receivedPowerIntensityMeasure = pi* userDensity * ...
     10.^(-2*powerAxis/(10*fadingCoefficient));
 
 gainAxis = (round(20*log10((min(arrayPattern)))/samplingResolution)*...
-    samplingResolution):samplingResolution:(round(20*log10((max(arrayPattern)))...
-    /samplingResolution)*samplingResolution);
+    samplingResolution):samplingResolution:(round(20*log10((max(...
+    arrayPattern)))/samplingResolution) * samplingResolution);
+
+% Compute the convolution artifacts length from the length of the gain axis
+
+gainConvolutionArtifactLength = ceil(length(gainAxis)/2);
 
 arrayPatternProbabilityDensityFunction = noArrayLobes./(pi * ...
     abs(noArrayLobes*arrayDirectivity*sqrt(1- ...
@@ -142,21 +149,14 @@ arrayPatternProbabilityDensityFunction = arrayPatternProbabilityDensityFunction/
 % the received power intensity measure. Zero pad to account for the diff
 % function reducing the number of entries by 1.
 
-mappedProcessIntensityFunction = [diff(mappedProcessIntensityMeasure) ...
-    0] / diff(powerAxis(1:2));
+mappedProcessIntensityFunction = [0 diff(mappedProcessIntensityMeasure)] ...
+    / diff(powerAxis(1:2));
 
 % Calculate the expected intensity function of the received power point
 % process from (82) in logbook.
 
-%receivedPowerIntensityFunctionGround = -pi * userDensity * ...
-%    2*10.^(-2*powerAxis/(10*fadingCoefficient))*log(10)/fadingCoefficient;
-
-% receivedPowerIntensityFunctionGround = (-pi * userDensity * log(10)) / ...
-%     fadingCoefficient * 2.^(-powerAxis/(5*fadingCoefficient)) .* ...
-%     5.^((-powerAxis/(5*fadingCoefficient))-1);
-
 receivedPowerIntensityFunctionGround = (-pi * userDensity * log(10))  *  ...
-    10.^(-powerAxis/(10*fadingCoefficient)) / 10*fadingCoefficient;
+    10.^(-2*powerAxis/(10*fadingCoefficient)) / 10*fadingCoefficient;
 
 % Perform convolution of the sampled intensity function and array pattern
 % PDF. Discard the 'top' samples, which correspond to P_r we aren't
@@ -171,18 +171,29 @@ receivedPowerIntensityFunction = receivedPowerIntensityFunction(1:...
 %% 
 
 % find the first valid entry in the measurement of the empirical intensity
-% function (i.e. when it no longer equals zero)
+% function (i.e. when it no longer equals zero) and compare this with the
+% convolution artifact length.
 
-startingSample = find(mappedProcessIntensityFunction,1,'first');
+startingSample = max(gainConvolutionArtifactLength,(find(...
+    mappedProcessIntensityFunction,1,'first')));
+
+% find the last valid entry in the measurement of the empirical intensity
+% function (i.e. when the values become zero)
+
+endingSample = min(find(mappedProcessIntensityFunction(startingSample:end)...
+    ,1,'first'));
 
 % Calculate the mean squared error of the predictions made by the 
-% directional and omni-directional models to the empirical measured point process intensity function.
+% directional and omni-directional models to the empirical measured point
+% process intensity function.
 
-mseOmnidirectional = mean((mappedProcessIntensityFunction(startingSample:end) ...
-    - receivedPowerIntensityFunctionGround(startingSample:end)).^2);
+mseOmnidirectional = mean((mappedProcessIntensityFunction(startingSample:...
+    endingSample) - receivedPowerIntensityFunctionGround(startingSample:...
+    endingSample)).^2);
 
-mseDirectional = mean((mappedProcessIntensityFunction(startingSample:end) ...
-    - receivedPowerIntensityFunction(startingSample:end)).^2);
+mseDirectional = mean((mappedProcessIntensityFunction(startingSample:...
+    endingSample) - receivedPowerIntensityFunction(startingSample:...
+    endingSample)).^2);
 
 %% Calculate the SINRs
 
@@ -192,24 +203,29 @@ mseDirectional = mean((mappedProcessIntensityFunction(startingSample:end) ...
 % process for comparison
 
 figure;
-plot(powerAxis,mappedProcessIntensityMeasure,'DisplayName',...
-    ['Empirical Process Intensity Measure']);
+plot(powerAxis(startingSample:end),mappedProcessIntensityMeasure(...
+    startingSample:end),'DisplayName',['Empirical Process Intensity Measure']);
 hold on;
-plot(powerAxis,receivedPowerIntensityMeasure,'DisplayName',...
-    ['Theoretical Process Intensity Measure']);
+plot(powerAxis(startingSample:end),receivedPowerIntensityMeasure(...
+    startingSample:end),'DisplayName',['Theoretical Process Intensity Measure']);
 xlabel('Region [x,\infty]');
 ylabel('Intensity measure');
 
 legend(gca,'show','Location','NorthEast');
 
 figure;
-semilogy(powerAxis,mappedProcessIntensityFunction,plotFormat(1,'bw'),'DisplayName',...
+semilogy(powerAxis(startingSample:end),mappedProcessIntensityFunction(...
+    startingSample:end),plotFormat(1,'bw'),'DisplayName',...
     ['Empirical Process Intensity Function']);
 hold on;
-semilogy(powerAxis,receivedPowerIntensityFunctionGround,plotFormat(2,'bw'),'DisplayName',...
-    ['Theoretical Process Intensity Function(omnidirectional, MSE = ' num2str(mseOmnidirectional) ')']);
-semilogy(powerAxis,receivedPowerIntensityFunction,plotFormat(3,'bw'),'DisplayName',...
-    ['Theoretical Process Intensity Function (directional, MSE = ' num2str(mseDirectional) ')'])
+semilogy(powerAxis(startingSample:end),receivedPowerIntensityFunctionGround...
+    (startingSample:end),plotFormat(2,'bw'),'DisplayName',...
+    ['Theoretical Process Intensity Function(omnidirectional, MSE = '...
+    num2str(mseOmnidirectional) ')']);
+semilogy(powerAxis(startingSample:end),receivedPowerIntensityFunction(...
+    startingSample:end),plotFormat(3,'bw'),'DisplayName',...
+    ['Theoretical Process Intensity Function (directional, MSE = ' ...
+    num2str(mseDirectional) ')'])
 xlabel('Region [x,\infty]');
 ylabel('Intensity function');
 

@@ -12,13 +12,7 @@ if (strcmp(domainShape,'disc'))
     
     % If domain is a disc of radius x, delete all elements for which  d > x
     
-    distance = zeros(1,numberOfUsers);
-    
-    for i = 1:length(orientation)
-       
-        distance(i) = euclideanDistance(location(i,:),[0 0]);
-
-    end
+[distance,~] = euclideanDistAngle([0 0],location);
     
     retentionVector = find(distance <= networkRadius);
     
